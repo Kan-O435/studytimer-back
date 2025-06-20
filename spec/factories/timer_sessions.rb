@@ -1,10 +1,10 @@
 # spec/factories/timer_sessions.rb
 FactoryBot.define do
   factory :timer_session do
-    started_at { Time.current - 1.hour } # デフォルト値
-    duration_minutes { 25 } # デフォルト値
-    user # userファクトリと関連付ける
-    # task { nil } # taskはnullableなのでデフォルトはnilでもOK
+    user
+    started_at { 1.hour.ago }
+    ended_at { Time.current }
+    duration_minutes { 25 }
+    # task { nil }  # 必要であればコメント解除
   end
 end
-

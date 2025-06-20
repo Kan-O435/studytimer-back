@@ -1,97 +1,150 @@
-# This file is copied to spec/ when you run 'rails generate rspec:install'
-require 'spec_helper'
+# このファイルは `rails generate rspec:install` コマンドによって spec/ にコピーされます。
+# 通常、このファイルはテストスイートのルートであり、すべてのスペックファイルから最初に読み込まれます。
+require 'spec_helper' # RSpecのコア設定を読み込みます
 
-# ここが非常に重要です。rspec-railsの機能が不足している可能性が高いので、明示的にrequireします。
-# 通常は 'config/environment' の中でRails自体がロードされ、
-# その際に rspec-rails の Railtie も読み込まれるはずですが、
-# エラーから見て、それが不十分な可能性があります。
-require 'rails' # ★この行は残しておく
+# RAILS_ENV を 'test' に設定します。これにより、Railsアプリケーションはテストモードで動作します。
 ENV['RAILS_ENV'] ||= 'test'
+
+# Rails アプリケーションの環境全体を読み込みます。
+# これにより、モデル、コントローラ、ルーティング、設定など、アプリケーションのすべてのコンポーネントがテストで利用可能になります。
+# この行は spec/rails_helper.rb の中で一度だけ実行されるべきです。
 require_relative '../config/environment'
-# Prevent database truncation if the environment is production
-abort("The Rails environment is running in production mode!") if Rails.env.production?
-require 'rspec/rails' # ★この行を追加または確認してください！
 
-# DatabaseCleanerを読み込む
-require 'database_cleaner/active_record'
+# RailsのRSpecサポートを読み込みます。
+# これにより、`type: :model` や `type: :request` といったRSpecのRails固有の機能や、
+# `fixture_paths`、`render_views` などのヘルパーが利用可能になります。
+require 'rspec/rails'
 
-# Devise::Test::IntegrationHelpers を読み込む
-require 'devise/test/integration_helpers'
+# shoulda-matchers の設定
+require 'shoulda/matchers'
 
-# Requires supporting ruby files with custom matchers and macros, etc., in
-# spec/support/ and its subdirectories.
-# Rails.root.glob('spec/support/**/*.rb').sort.each { |f| require f }
-# 上記のコメントアウトを外して、spec/support/ディレクトリ内のヘルパーファイルを読み込むようにすることも検討してください。
-# 例えば、custom_devise_helpers.rb などを作成している場合。
-Dir[Rails.root.join('spec', 'support', '**', '*.rb')].sort.each { |f| require f } # ★この行のコメントアウトを解除する
+Shoulda::Matchers.configure do |config|
+  config.integrate do |with|
+    with.test_framework :rspec
+    with.library :rails
+  end
+end
 
-# Checks for pending migrations and applies them before tests are run.
+# --- データベース関連の初期設定 ---
+
+# マイグレーションが保留中の場合はテスト実行を中止し、スキーマの更新を促します。
+# これにより、データベーススキーマがテストコードと一致しないことによる問題を回避します。
 begin
   ActiveRecord::Migration.maintain_test_schema!
 rescue ActiveRecord::PendingMigrationError => e
   abort e.to_s.strip
 end
 
+# --- テストヘルパーとFactoryBot、Deviseの読み込み ---
+
+# spec/support/ ディレクトリとそのサブディレクトリにあるRubyファイルをすべて読み込みます。
+# ここには、カスタムマッチャ、マクロ、Deviseのヘルパーなど、テスト固有のヘルパーが配置されます。
+# 例えば、`spec/support/devise.rb` や `spec/support/factory_bot.rb` などがある場合、ここで読み込まれます。
+Dir[Rails.root.join('spec', 'support', '**', '*.rb')].sort.each { |f| require f }
+
+# --- RSpec のグローバル設定 ---
+
 RSpec.configure do |config|
-  # 前回の修正でコメントアウトした filter_rails_from_backtrace! は
-  # rspec/rails が適切に読み込まれていれば利用可能になるはずですが、
-  # 一旦はエラーを避けるためにコメントアウトしたままで良いでしょう。
-  # 問題が解決した後に必要であれば再評価してください。
-  # config.filter_rails_from_backtrace!
-
-  # config.use_transactional_fixtures = false # 前回コメントアウトしたままでOKです。
-
-  # FactoryBotのシンタックスをテスト内で使えるようにする
+  # FactoryBot のDSL (Domain Specific Language) をテスト内で利用できるようにします。
+  # これにより、`FactoryBot.create(:user)` の代わりに `create(:user)` と短縮して書けるようになります。
   config.include FactoryBot::Syntax::Methods
 
-  # Deviseのテストヘルパーをrequest specで使用できるようにする
+  # Devise のテストヘルパーをリクエストスペック（`type: :request`）で利用できるようにします。
+  # これにより、APIテストなどで認証済みのユーザーとしてリクエストを送信できるようになります。
   config.include Devise::Test::IntegrationHelpers, type: :request
 
-  # --- DatabaseCleanerの設定 ---
-  # テストスイート全体の開始前にDBを完全にクリーンアップ
+  # --- DatabaseCleaner の設定 ---
+  # DatabaseCleaner は、テスト間のデータベース状態のクリーンアップを管理するためのgemです。
+  # 各テストが独立して実行されることを保証し、テストの信頼性を高めます。
+
+  # テストスイート全体の開始前に、データベースを完全にクリーンアップします。
+  # 通常、これは最初の実行時のみに行い、全てのテーブルを削除してから再作成する `truncation` 戦略を使います。
   config.before(:suite) do
+    # デフォルトの戦略を `:transaction` に設定。
+    # `truncation` でクリーンアップするためには、先にその戦略を定義しておく必要があります。
     DatabaseCleaner.clean_with(:truncation)
   end
 
-  # 各テストの前にDatabaseCleanerの戦略を設定
+  # 各テストケースの実行前にDatabaseCleanerの戦略を設定します。
+  # デフォルトでは高速なトランザクション戦略を使用します。
   config.before(:each) do
-    DatabaseCleaner.strategy = :transaction # デフォルトはトランザクション戦略
+    DatabaseCleaner.strategy = :transaction
   end
 
-  # system specなどJavaScriptを伴うテストの場合、トランザクションだとDBの状態が見えないためtruncationに変更
-  config.before(:each, type: :system) do # もしsystem specがあれば、この行のコメントアウトを解除
+  # JavaScript を伴うシステムスペック（ブラウザ操作など）の場合、
+  # トランザクション戦略ではDBの状態が見えないため、`truncation` 戦略に変更します。
+  # これにより、JavaScriptからDBの変更が正しく反映されていることを確認できます。
+  config.before(:each, type: :system) do
     DatabaseCleaner.strategy = :truncation
   end
 
-  # 各テストの前にデータベースクリーナーを開始
+  # 各テストケースの実行前にデータベースクリーナーを開始します。
   config.before(:each) do
     DatabaseCleaner.start
   end
 
-  # 各テストの後にデータベースクリーナーを終了（トランザクションをロールバックまたはテーブルをtruncate）
+  # 各テストケースの実行後にデータベースクリーナーを終了（トランザクションのロールバックまたはテーブルのtruncate）します。
   config.append_after(:each) do
     DatabaseCleaner.clean
   end
 
-  # FactoryBotのシーケンスを各テストの後にリセット
+  # FactoryBot のシーケンス（連番を生成する機能）を各テストの後にリセットします。
+  # これにより、テスト間でシーケンスの値が引き継がれるのを防ぎ、テストの独立性を保ちます。
   config.after(:each) do
     FactoryBot.rewind_sequences
   end
-  # --- DatabaseCleanerの設定ここまで ---
+  # --- DatabaseCleaner の設定ここまで ---
 
-  # rspec-expectations config
+  # RSpec の期待値（expectations）の挙動を設定します。
   config.expect_with :rspec do |expectations|
+    # カスタムマッチャのディスクリプションにチェインされた句を含めるかどうか。
     expectations.include_chain_clauses_in_custom_matcher_descriptions = true
   end
 
-  # rspec-mocks config
+  # RSpec のモック（mocks）の挙動を設定します。
   config.mock_with :rspec do |mocks|
+    # 部分的なダブル（partial doubles）が実際に応答しないメソッドを呼び出そうとした場合にエラーを発生させます。
+    # これにより、テストの信頼性が向上します。
     mocks.verify_partial_doubles = true
   end
 
+  # メタデータが共有コンテキストにどのように適用されるかを設定します。
   config.shared_context_metadata_behavior = :apply_to_host_groups
 
-  # Backtrace filtering (previous version's fix)
+  # スタックトレースから不要な行を除外します。
+  # これにより、テスト失敗時のエラーメッセージがより見やすくなります。
+  # Rails の内部パスや bin/ ディレクトリからのパスを除外しています。
   config.backtrace_exclusion_patterns << /lib\/rails/
   config.backtrace_exclusion_patterns << /bin\//
+
+  # Faker を読み込みます。これはダミーデータを生成するためのgemです。
+  # テストコード内で `Faker::Name.name` のように直接利用できます。
+  require 'faker'
+
+  # テストが失敗した場合に、ランダムな順序でテストを実行する設定。
+  # これにより、テスト間の依存関係によるバグを発見しやすくなります。
+  config.order = :random
+  Kernel.srand config.seed
+
+  # Rails 7.1.x + Ruby 3.2.x で `ActionView::Template::Handlers::ERB::ENCODING_FLAG` が未定義の場合の対策
+  # このコードは、特定の環境下で発生する既知の問題に対する一時的な回避策です。
+  # RailsやActionView、Rubyのバージョンが更新され、この問題が解決されたら削除しても構いません。
+  config.before(:suite) do
+    # ActionView::Template::Handlers::ERB が定義されており、かつ ENCODING_FLAG が未定義の場合にのみ定義します。
+    # ERB がモジュールとして定義されていることを前提とします。
+    if defined?(ActionView::Template::Handlers::ERB) && !defined?(ActionView::Template::Handlers::ERB::ENCODING_FLAG)
+      # 定数を直接追加します。`module ... end` でモジュールを再オープンするのではなく、
+      # 定数を直接クラス/モジュールに追加することで、TypeErrorを回避します。
+      ActionView::Template::Handlers::ERB.const_set(:ENCODING_FLAG, ''.freeze)
+    end
+  end
 end
+
+# Shoulda::Matchers の設定が重複していたため、一つにまとめました。
+# このブロックは既にファイルの先頭に存在するため、重複を削除します。
+# Shoulda::Matchers.configure do |config|
+#   config.integrate do |with|
+#     with.test_framework :rspec
+#     with.library :rails
+#   end
+# end

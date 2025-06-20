@@ -10,9 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_06_19_113850) do
+ActiveRecord::Schema[7.1].define(version: 2025_06_20_010508) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "reviews", force: :cascade do |t|
+    t.integer "score"
+    t.text "comment"
+    t.bigint "user_id", null: false
+    t.bigint "timer_session_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["timer_session_id"], name: "index_reviews_on_timer_session_id"
+    t.index ["user_id"], name: "index_reviews_on_user_id"
+  end
 
   create_table "tasks", force: :cascade do |t|
     t.bigint "user_id", null: false
@@ -65,6 +76,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_19_113850) do
     t.index ["uid", "provider"], name: "index_users_on_uid_and_provider", unique: true
   end
 
+  add_foreign_key "reviews", "timer_sessions"
+  add_foreign_key "reviews", "users"
   add_foreign_key "tasks", "users"
   add_foreign_key "timer_sessions", "tasks"
   add_foreign_key "timer_sessions", "users"

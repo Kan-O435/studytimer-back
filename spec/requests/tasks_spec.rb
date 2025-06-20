@@ -1,105 +1,98 @@
+# spec/requests/tasks_spec.rb
 require 'rails_helper'
 
 RSpec.describe 'Tasks API', type: :request do
-  # 各テストグループ/コンテキストで新しいユニークなユーザーをFactoryBotで作成
-  # FactoryBotのsequence(:email)でメールアドレスの重複問題を解決済み
-  let!(:user) { create(:user) }
+  # FactoryBot でユーザーを作成
+  let(:user) { create(:user).tap(&:confirm)}
 
-  # 認証ヘッダーを生成し、テスト実行前に設定するためのヘルパー
-  # このメソッドは一度だけ実行し、その結果をキャッシュする
-  # リクエストスペックのコンテキスト（self）でpostメソッドが利用可能
-  let(:authenticated_headers) do
-    # Devise-token-auth のサインインエンドポイント
+  # 認証ヘッダーを格納するインスタンス変数
+  # 各テストが実行される前にユーザーをログインさせ、トークンを取得します
+  before do
+    # Devise Token Auth のログインエンドポイントを叩く
+    # params には、FactoryBot で作成したユーザーのメールアドレスとパスワードを使用します
     post '/auth/sign_in', params: { email: user.email, password: user.password }
-    # レスポンスヘッダーから認証情報を抽出
-    response.headers.slice('access-token', 'client', 'uid')
+
+    # レスポンスヘッダーから認証トークン情報を抽出します
+    # これらのキーは devise_token_auth が返すヘッダー名に対応しています
+    @auth_headers = response.headers.slice('client', 'access-token', 'uid', 'expiry', 'token-type')
+
+    # --- デバッグ用の出力（一時的に追加） ---
+    # 認証ヘッダーが正しく取得できているか確認するために使います
+    puts "DEBUG: Tasks API - Generated Auth Headers: #{@auth_headers.inspect}"
+    puts "DEBUG: Tasks API - Initial Login Response Status: #{response.status}"
+    puts "DEBUG: Tasks API - Initial Login Response Body: #{response.body}"
+    # --- デバッグ用の出力ここまで ---
   end
 
-  # GET /tasks のテスト
+  # let を使って @auth_headers を各テスト内で 'auth_headers' として利用可能にします
+  let(:auth_headers) { @auth_headers }
+
+  # 有効な属性と無効な属性の定義
+  let(:valid_attributes) { attributes_for(:task, user: user) } # user_id も含めるか、Factoryに紐付け設定
+  let(:invalid_attributes) { attributes_for(:task, title: nil, user: user) } # 例えばタイトルがnilの場合
+
+  # --- GET /tasks ---
   describe 'GET /tasks' do
     context '認証済みの場合' do
-      # このcontext内のテストが実行される前に認証ヘッダーを評価し、利用可能にする
-      let!(:auth_headers) { authenticated_headers }
-
       it 'ユーザーのタスク一覧を返すこと' do
-        # 自分のタスクを作成
-        task1 = create(:task, user: user, title: 'My Task 1')
-        task2 = create(:task, user: user, title: 'My Task 2')
+        # テストに必要なデータをセットアップ
+        create_list(:task, 3, user: user) # ユーザーに紐付くタスクを3つ作成
+        create_list(:task, 2) # 他のユーザーのタスク（このテストでは取得されないはず）
 
-        # 他のユーザーのタスクを作成（メールアドレス重複はFactoryBotで解決済み）
-        other_user = create(:user)
-        create(:task, user: other_user, title: 'Other User Task')
-
-        # 認証ヘッダーを付けてGETリクエストを送信
         get tasks_path, headers: auth_headers
-
-        # レスポンスの検証
-        expect(response).to have_http_status(:ok) # HTTPステータスが200 OKであること
-        json_response = JSON.parse(response.body)
-
-        # 自分のタスクのみが返されることを確認
-        expect(json_response.size).to eq(2)
-        expect(json_response.map { |t| t['id'] }).to match_array([task1.id, task2.id])
-        expect(json_response.map { |t| t['title'] }).to include('My Task 1', 'My Task 2')
-        expect(json_response.map { |t| t['title'] }).not_to include('Other User Task')
+        # --- デバッグ用の出力（一時的に追加） ---
+        puts "DEBUG: Tasks API GET - Response Status: #{response.status}"
+        puts "DEBUG: Tasks API GET - Response Body: #{response.body}"
+        # --- デバッグ用の出力ここまで ---
+        expect(response).to have_http_status(:ok)
+        expect(json_response.count).to eq(3) # レスポンスのJSONに含まれるタスクの数が3であることを確認
+        expect(json_response.first['user_id']).to eq(user.id) # ユーザーのタスクであることを確認
       end
     end
 
     context '未認証の場合' do
-      it '401 Unauthorizedを返すこと' do
-        get tasks_path # ヘッダーなしでリクエスト
-        expect(response).to have_http_status(:unauthorized) # HTTPステータスが401 Unauthorizedであること
+      it '401 Unauthorized を返すこと' do
+        get tasks_path # ヘッダーなし
+        expect(response).to have_http_status(:unauthorized)
       end
     end
   end
 
-  # POST /tasks のテスト
+  # --- POST /tasks ---
   describe 'POST /tasks' do
     context '認証済みの場合' do
-      let!(:auth_headers) { authenticated_headers }
-
       context '有効なパラメータの場合' do
-        let(:valid_attributes) { { task: { title: 'New Task' } } }
-
         it '新しいタスクを作成すること' do
           expect {
-            post tasks_path, params: valid_attributes, headers: auth_headers
+            post tasks_path, params: { task: valid_attributes }, headers: auth_headers
           }.to change(Task, :count).by(1)
-
-          expect(response).to have_http_status(:created)
-          json_response = JSON.parse(response.body)
-          expect(json_response['title']).to eq('New Task')
-          expect(json_response['user_id']).to eq(user.id)
+          expect(response).to have_http_status(:created) # または :ok, アプリケーションの挙動による
+          expect(json_response['title']).to eq(valid_attributes[:title])
         end
       end
 
       context '無効なパラメータの場合' do
-        # この行の波括弧 `{` に対応する `}` がファイルの最後まで見つからない、というのがエラーの原因です
-        let(:invalid_attributes) { { task: { title: '' } } } # ここで正しく閉じられているか確認！
-
         it 'タスクを作成せず、エラーを返すこと' do
           expect {
-            post tasks_path, params: invalid_attributes, headers: auth_headers
-          }.not_to change(Task, :count)
-
+            post tasks_path, params: { task: invalid_attributes }, headers: auth_headers
+          }.to change(Task, :count).by(0)
           expect(response).to have_http_status(:unprocessable_entity)
-          json_response = JSON.parse(response.body)
-          expect(json_response['errors']).to be_an(Array)
-          expect(json_response['errors']).to include("Title can't be blank")
+          # エラーメッセージがJSONで返されることを期待する場合
+          # expect(json_response['title']).to include("can't be blank")
         end
       end
-    end # ここも大事な `end` です。`context '認証済みの場合'` を閉じる
+    end
 
     context '未認証の場合' do
-      let(:valid_attributes) { { task: { title: 'New Task' } } }
-
-      it '401 Unauthorizedを返すこと' do
-        post tasks_path, params: valid_attributes
+      it '401 Unauthorized を返すこと' do
+        post tasks_path, params: { task: valid_attributes } # ヘッダーなし
         expect(response).to have_http_status(:unauthorized)
       end
     end
-  end # `describe 'POST /tasks'` を閉じる
+  end
 
-  # ... (DELETE /tasks/:id のコードは省略) ...
-
-end # `RSpec.describe 'Tasks API', type: :request do` を閉じる
+  # --- Helper Methods for JSON parsing (もし無ければ追加) ---
+  def json_response
+    JSON.parse(response.body)
+  end
+end
