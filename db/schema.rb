@@ -10,19 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_06_20_010508) do
+ActiveRecord::Schema[7.1].define(version: 2025_06_20_134913) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
   create_table "reviews", force: :cascade do |t|
-    t.integer "score"
+    t.integer "rating", null: false
     t.text "comment"
-    t.bigint "user_id", null: false
+    t.bigint "user_id"
     t.bigint "timer_session_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["timer_session_id"], name: "index_reviews_on_timer_session_id"
     t.index ["user_id"], name: "index_reviews_on_user_id"
+    t.check_constraint "rating >= 1 AND rating <= 5", name: "check_rating_range"
   end
 
   create_table "tasks", force: :cascade do |t|
@@ -32,11 +33,6 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_20_010508) do
     t.datetime "updated_at", null: false
     t.text "description"
     t.index ["user_id"], name: "index_tasks_on_user_id"
-  end
-
-  create_table "temer_sessions", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
   end
 
   create_table "timer_sessions", force: :cascade do |t|

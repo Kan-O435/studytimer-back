@@ -1,3 +1,5 @@
+# spec/rails_helper.rb
+
 # このファイルは `rails generate rspec:install` コマンドによって spec/ にコピーされます。
 # 通常、このファイルはテストスイートのルートであり、すべてのスペックファイルから最初に読み込まれます。
 require 'spec_helper' # RSpecのコア設定を読み込みます
@@ -14,6 +16,14 @@ require_relative '../config/environment'
 # これにより、`type: :model` や `type: :request` といったRSpecのRails固有の機能や、
 # `fixture_paths`、`render_views` などのヘルパーが利用可能になります。
 require 'rspec/rails'
+
+# ★重要★ Devise と Devise Token Auth のテストヘルパーをここで明示的に require します。
+# これにより、RSpec.configure が実行される前にモジュールがロードされます。
+require 'devise/test' # Deviseのテストヘルパーの一般的なロード方法
+require 'devise/test_helpers' # これも試す
+
+# DeviseTokenAuthのヘルパーは、Deviseのテストヘルパーがロードされた後に自動的に利用可能になるか、
+# もしくは以下でRSpec.configure内でインクルードされます。
 
 # shoulda-matchers の設定
 require 'shoulda/matchers'
@@ -38,8 +48,6 @@ end
 # --- テストヘルパーとFactoryBot、Deviseの読み込み ---
 
 # spec/support/ ディレクトリとそのサブディレクトリにあるRubyファイルをすべて読み込みます。
-# ここには、カスタムマッチャ、マクロ、Deviseのヘルパーなど、テスト固有のヘルパーが配置されます。
-# 例えば、`spec/support/devise.rb` や `spec/support/factory_bot.rb` などがある場合、ここで読み込まれます。
 Dir[Rails.root.join('spec', 'support', '**', '*.rb')].sort.each { |f| require f }
 
 # --- RSpec のグローバル設定 ---
@@ -49,9 +57,12 @@ RSpec.configure do |config|
   # これにより、`FactoryBot.create(:user)` の代わりに `create(:user)` と短縮して書けるようになります。
   config.include FactoryBot::Syntax::Methods
 
-  # Devise のテストヘルパーをリクエストスペック（`type: :request`）で利用できるようにします。
-  # これにより、APIテストなどで認証済みのユーザーとしてリクエストを送信できるようになります。
+  # Devise および Devise Token Auth のテストヘルパーを RSpec.configure ブロック内でインクルードします。
+  # require がここより前で行われていれば、NameErrorは発生しないはずです。
   config.include Devise::Test::IntegrationHelpers, type: :request
+  config.include DeviseTokenAuth::TestHelpers::ControllerHelpers, type: :controller
+  config.include DeviseTokenAuth::TestHelpers::IntegrationHelpers, type: :request
+
 
   # --- DatabaseCleaner の設定 ---
   # DatabaseCleaner は、テスト間のデータベース状態のクリーンアップを管理するためのgemです。
@@ -139,12 +150,3 @@ RSpec.configure do |config|
     end
   end
 end
-
-# Shoulda::Matchers の設定が重複していたため、一つにまとめました。
-# このブロックは既にファイルの先頭に存在するため、重複を削除します。
-# Shoulda::Matchers.configure do |config|
-#   config.integrate do |with|
-#     with.test_framework :rspec
-#     with.library :rails
-#   end
-# end

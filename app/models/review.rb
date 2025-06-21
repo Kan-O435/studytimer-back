@@ -1,5 +1,5 @@
 class Review < ApplicationRecord
-  belongs_to :user
+  #belongs_to :user
   belongs_to :timer_session
 
   validates :score,presence:true,inclusion:{in:1..5}

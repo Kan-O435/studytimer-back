@@ -1,36 +1,51 @@
-# app/controllers/api/v1/reviews_controller.rb
-class Api::V1::ReviewsController < ApplicationController
-  before_action :authenticate_user!
+module Api
+  module V1
+    class ReviewsController < ApplicationController
+      include DeviseTokenAuth::Concerns::SetUserByToken
 
-  def create
-    @review = current_user.reviews.build(review_params)
+      before_action :authenticate_user!
 
-    if @review.save
-      render json: @review, status: :created
-    else
-      render json: { errors: @review.errors.full_messages }, status: :unprocessable_entity
+      def create
+        timer_session = current_api_v1_user.timer_sessions.find_by(id: review_params[:timer_session_id])
+
+        unless timer_session
+          render json: { errors: ['指定されたタイマーセッションが見つからないか、アクセスする権限がありません。'] }, status: :not_found
+          return
+        end
+
+        @review = timer_session.build_review(review_params.except(:timer_session_id))
+
+        if @review.save
+          render json: @review, status: :created
+        else
+          render json: { errors: @review.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
+      def index
+        @reviews = current_api_v1_user.reviews
+          .includes(:timer_session)
+          .order(created_at: :desc)
+        render json: @reviews
+      end
+
+      def show
+        @review = current_api_v1_user.reviews.find_by(id: params[:id])
+        if @review
+          render json: @review
+        else
+          render json: { error: "Not found" }, status: :not_found
+        end
+      end
+
+      private
+
+      def review_params
+        raw = params.require(:review).permit(:rating, :comment, :timer_session_id)
+        raw[:score] = raw.delete(:rating) if raw[:rating] # rating → score に変換
+        raw
+      end
+
     end
-  end
-
-  def index
-    @reviews = current_user.reviews
-      .includes(:timer_session)
-      .order(created_at: :desc)
-    render json: @reviews
-  end
-
-  def show
-    @review = current_user.reviews.find_by(id: params[:id])
-    if @review
-      render json: @review
-    else
-      render json: { error: "Not found" }, status: :not_found
-    end
-  end
-
-  private
-
-  def review_params
-    params.require(:review).permit(:score, :rating, :comment, :timer_session_id)
   end
 end
