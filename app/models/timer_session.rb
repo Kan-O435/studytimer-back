@@ -1,6 +1,7 @@
 class TimerSession < ApplicationRecord
   belongs_to :user
   belongs_to :task, optional: true
+  has_one :review,dependent: :destroy
 
   validates :started_at, presence: true
   validates :duration_minutes, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
