@@ -1,9 +1,9 @@
 class TasksController < ApplicationController
   before_action :authenticate_user!
-  before_action :set_task, only: [:show,:update,:destroy]
+  before_action :set_task, only: [:show, :update, :destroy]
 
   def index
-    @tasks=current_user.tasks
+    @tasks = current_user.tasks
     render json: @tasks
   end
 
@@ -24,7 +24,7 @@ class TasksController < ApplicationController
     if @task.update(task_params)
       render json: @task
     else
-      render json: @task.error,status: :unprocessable_entity
+      render json: { errors: @task.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
@@ -41,10 +41,10 @@ class TasksController < ApplicationController
   def set_task
     @task = current_user.tasks.find(params[:id])
   rescue ActiveRecord::RecordNotFound
-    render json:{error:['タスクが見つかりませんでした']},status: :not_found
+    render json: { error: ['タスクが見つかりませんでした'] }, status: :not_found
   end
 
   def task_params
-    params.require(:task).permit(:title,:status)
+    params.require(:task).permit(:title, :status)
   end
 end

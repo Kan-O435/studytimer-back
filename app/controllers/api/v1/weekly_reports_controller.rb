@@ -2,18 +2,24 @@ class Api::V1::WeeklyReportsController < ApplicationController
   before_action :authenticate_user!
 
   def index
-    today = Date.current
     user = current_user
+
+    # クエリパラメータから week_offset を取得（なければ0＝今週）
+    week_offset = params[:week_offset].to_i
+
+    # 週の始まりと終わりを計算（例：week_offset = 1 なら先週）
+    end_of_week = Date.current.beginning_of_week - 7 * week_offset.days + 6.days
+    start_of_week = end_of_week - 6.days
 
     recent_sessions = user.timer_sessions
                           .includes(:review, :task)
-                          .where(started_at: (today - 6.days).beginning_of_day..today.end_of_day)
+                          .where(started_at: start_of_week.beginning_of_day..end_of_week.end_of_day)
                           .order(started_at: :asc)
 
     weekly_data_hash = {}
 
     (0..6).each do |i|
-      date_obj = today - i.days
+      date_obj = start_of_week + i.days
       date_key = date_obj.strftime("%Y-%m-%d")
       weekly_data_hash[date_key] = {
         date: date_obj.strftime("%Y年%m月%d日 (%a)"),
@@ -27,15 +33,11 @@ class Api::V1::WeeklyReportsController < ApplicationController
 
     recent_sessions.each do |session|
       session_date_str = session.started_at.strftime("%Y-%m-%d")
-
       next unless weekly_data_hash[session_date_str]
 
       daily_data = weekly_data_hash[session_date_str]
       daily_data[:total_duration_minutes] += session.duration_minutes
-
-      if session.review&.score
-        daily_data[:ratings] << session.review.score
-      end
+      daily_data[:ratings] << session.review.score if session.review&.score
 
       daily_data[:sessions] << {
         id: session.id,
@@ -54,8 +56,11 @@ class Api::V1::WeeklyReportsController < ApplicationController
       data
     end
 
-    sorted_weekly_data = weekly_data.sort_by { |data| data[:date] }.reverse
+    sorted_weekly_data = weekly_data.sort_by { |data| data[:date] }
 
-    render json: sorted_weekly_data
+    render json: {
+      data: sorted_weekly_data,
+      summary: nil # 将来的に要約なども返す場合に備えて
+    }
   end
 end
