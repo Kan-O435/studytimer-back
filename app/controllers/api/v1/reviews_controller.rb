@@ -42,7 +42,7 @@ module Api
 
       def review_params
         raw = params.require(:review).permit(:rating, :comment, :timer_session_id)
-        raw[:score] = raw.delete(:rating) if raw[:rating] # rating → score に変換
+        raw[:score] = raw.delete(:rating) if raw[:rating]
         raw
       end
 

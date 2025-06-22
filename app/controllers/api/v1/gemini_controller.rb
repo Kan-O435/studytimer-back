@@ -1,7 +1,5 @@
 class Api::V1::GeminiController < ApplicationController
-  # POST /api/v1/gemini/summary
   def summary
-    # フロントから「一週間の学習内容」を受け取る想定
     learning_log = params[:learning_log]
     unless learning_log.present?
       render json: { error: "learning_logパラメータが必要です" }, status: :bad_request and return
